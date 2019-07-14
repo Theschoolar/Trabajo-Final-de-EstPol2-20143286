@@ -1,0 +1,356 @@
+```{r}
+#Cargamos la primera base de datos, extraida del PNUD, es el indice de desarrollo humano 
+link="https://docs.google.com/spreadsheets/d/e/2PACX-1vRIisl5a1YsqGrPxvzY1hwBWeFHRzivlMfZF6jpXOf93e7w2lrFsk-TC0qaFjwaCA/pub?gid=1154485003&single=true&output=csv"
+data=read.csv(link)
+```
+
+```{r}
+IDH=data
+IDH2=IDH
+```
+
+```{r}
+#Quitamos las ultimas filas, puesto que contienen información poco relevante para el analisis
+IDH2 = IDH[-c(2258:2264),]
+```
+```{r}
+#Eliminamos las 7 primeras filas, puesto que solo contienen descripciones de la tabla, mas no informacion valiosa
+IDH2 = IDH2[-c(1:7),]
+```
+
+```{r}
+#Eliminamos de la cuarta columna a la novena, puesto que son espacios en blanco y el IDH por promedio, el cual no nos importa para el estudio
+IDH2 = IDH2[-c(4:9)]
+```
+```{r}
+columnas=c(seq(5,10,2))
+IDH2 = IDH2[,-columnas]
+head(IDH2)
+```
+```{r}
+#Reemplazamos las comas por puntos, para no perder las variables numericas, hacemos esto en todas las variables numericas
+IDH2$X.8 =gsub("\\,", ".", IDH2$X.8) #Eliminar caracteres especiales
+IDH2$X.12 =gsub("\\,", ".", IDH2$X.12)
+#Eliminar caracteres especiales
+IDH2$X.10 =gsub("\\,", ".", IDH2$X.10) #Eliminar caracteres especiales
+IDH2$X.14 =gsub("\\,", ".", IDH2$X.14)
+```
+```{r}
+#Convertimos las columnas donde hay departamentos, provincias y distritos en caracteres, lo que genera espacios en blanco dentro de estas columnas
+IDH2 = IDH2[-c(8)]
+IDH2[c(1:3)]=lapply(IDH2[c(1:3)], as.character)
+IDH2[c(4:7)]=lapply(IDH2[c(4:7)], as.numeric)
+```
+
+```{r}
+IDH3=IDH2
+colnames(IDH2) = c("Ubigeo","departamento", "Distrito","Esperanza","Educa","TiempoEdu","Ingreso")
+```
+```{r}
+#Reemplazamos los espacios en blanco de las diferentes celdas por NA, para poder luego aplicar una funcion que borrará todas las filas con NA
+IDH2$departamento[IDH2$departamento == ""] <- NA
+IDH2$Distrito[IDH2$Distrito == ""] <- NA
+```
+
+```{r}
+#Con esta función, borramos todas las filas con NA en las columnas departamento y distrito
+IDH2 <- IDH2[!is.na(IDH2$departamento),]
+IDH2 <- IDH2[!is.na(IDH2$Distrito),]
+```
+```{r}
+
+IDH2 = IDH2[-c(2)]
+```
+```{r}
+#Aqui empezamos a trabajar con la quinta variable, asignacion presupuestal, base de datos construida con informacion extraida del portal consulta amigable, del ministerio de economía y finanzas
+
+link2="https://docs.google.com/spreadsheets/d/e/2PACX-1vSqHGEMH3NWsZEUAW8cBu9ENle5pOJy_Ee--1Stuv4LW3sPh8B4m_HWJS7fml0dIQ/pub?gid=1394897038&single=true&output=csv"
+data2=read.csv(link2)
+Presupuesto=data2
+```
+
+```{r}
+
+Presupuesto = Presupuesto[-c(1,2)]
+colnames(Presupuesto) = c("Asignacion", "VotoH","Ubigeo")
+```
+```{r}
+#Convertimos las variables a lo que deben de ser para que el analisis funcione bien
+Presupuesto[c(1)]=lapply(Presupuesto[c(1)], as.numeric)
+Presupuesto$VotoH= as.factor(Presupuesto$VotoH)
+Presupuesto[c(3)]=lapply(Presupuesto[c(3)], as.character)
+```
+
+```{r}
+#Juntamos ambas bases de datos por la columna ubigeo
+Datafinal = merge(IDH2, Presupuesto, by="Ubigeo")
+
+```
+
+```{r}
+#Regresion Logistica
+#Eliminamos cualquier variable que sea reconocida como caracter, puesto que ello nos traerá problemas al momento de realziar la regresion
+Dataregre= Datafinal[-c(1,2)]
+```
+
+```{r}
+#Regresion logistica:
+regre <- glm(VotoH ~ ., 
+               data = Dataregre, 
+               family = "binomial")
+```
+
+```{r}
+#Tras aplicar la regresión y aplicar el comando summary, podemos obervar que variables son estadisticamente significaticas y si su relacion con la pendiente es directa o inversa
+summary(regre)
+
+```
+```{r}
+#Margins lo aplicamos para observar el efecto de las variables independientes sobre la dependiente y cómo afectas estas el promedio de que ocurra el eveto buscado, en este caso, la probabilidad que gane ollanta Humala
+library(margins)
+
+(regrem = margins(regre))
+```
+```{r}
+(mr=summary(regrem))
+```
+```{r}
+library(ggplot2)
+base= ggplot(mr,aes(x=factor, y=AME)) + geom_point() 
+base
+```
+```{r}
+#Las barras de error las aplicamos con la finalidad de poder observar que efectos aportados por las variables independientes son distinguibles entre si y cuales no, esto se aprecia en el solapamiento de las barras de error
+base +  geom_errorbar(aes(ymin=lower, ymax=upper))
+```
+```{r}
+#Eliminamos cualquier columna que sea un problema al momento de ejecutar el cluster
+#CLUSTER
+Dataclus= Datafinal[-c(2,8)]
+```
+```{r}
+row.names(Dataclus)=Dataclus$Ubigeo
+Dataclus$Ubigeo=NULL
+```
+```{r}
+clus.scaled = scale(Dataclus)
+head(Dataclus)
+
+```
+```{r}
+#Observamos que no haya nada extraño
+summary(Dataclus)
+```
+
+```{r}
+#Pedimos cual seria el numero adecuado de clusters, conveninetemente, el mejor numero es 2, lo cual nos permita hacer un contraste directo con nuestra variable dependiente dicotómica, usando el número optimo de clusters posible
+library(NbClust)
+nb <- NbClust(clus.scaled, method = "complete") 
+```
+```{r}
+#Aplicamos la tecnica, señalando que queremos dos clusters
+library(factoextra)
+
+#aplicamos técnica
+solucionJerarquica =  eclust(clus.scaled, 
+                      FUNcluster ="hclust", #método jerarquico
+                      k = 2, #número de clusters -ESTO CAMBIA-
+                      method = "complete",
+                      graph = F)
+
+#guardamos aglomeración como nueva variable
+Dataclus$jerarquica = solucionJerarquica$cluster
+```
+```{r}
+#Cuandro que muestra la media de los diferentes casos en cada variable, dividido por los cluster.
+aggregate(cbind(Esperanza,Educa,TiempoEdu,Ingreso,
+                Asignacion) ~ jerarquica, data=Dataclus,FUN=mean)
+```
+```{r}
+#Creamos una data de seguridad, por si algo sale mal y asi no perder la dala
+Datafinal2=Datafinal
+```
+```{r}
+#Colocamos Ubigeo como nombre de las filas
+row.names(Datafinal)=Datafinal$Ubigeo
+Datafinal$Ubigeo=NULL
+
+head(Datafinal) #resultado final
+```
+
+```{r}
+#Nos aseguramos de que todas las independientes esten en numerico
+Datafinals=Datafinal
+Datafinals[c(2:6)]=lapply(Datafinals[c(2:6)], as.numeric)
+```
+```{r}
+#Eliminamos a la variable independiente y el nombre de los distritos
+#Analisis factorial:
+Datafinals=as.data.frame(scale(Datafinals[-c(1,7)]))
+```
+```{r}
+library(psych)
+```
+```{r}
+#Hacemos una correlación de pearson, para observar si la relacion entre nuestras independientes es fuerte o debil, solo encontramos dos casos en los que las independientes tienen una correlacion fuerte y son TiempoEdu con Educa e Ingreso con TiempoEdu
+pearson = cor(Datafinals) 
+
+#vemos el resultado gráficamente:
+cor.plot(pearson, 
+         numbers=T, 
+         upper=FALSE, 
+         main = "Correlation", 
+         show.legend = FALSE) #verlo en un grá
+```
+```{r}
+#Aplicamos la medida de adecuación muestral, nos sale por debajo de lo optimo, que sería 0.7
+KMO(Datafinals)
+```
+```{r}
+#El numero de indices a formar es 2
+fa.parallel(pearson, fm="pa", fa="fa", main = "Scree Plot",n.obs = nrow(Datafinals)) #cuantos indices deberia formar
+```
+
+```{r}
+Datafinalsf <- fa(Datafinals, #data estandarizada
+                     nfactors=2, #número de factores
+                     rotate="varimax") 
+```
+
+```{r}
+Datafinalsf$loadings
+```
+```{r}
+#Grafico que nos muestra cuales son las variables que se han juntado y cuales no pueden agruparse
+fa.diagram(Datafinalsf) 
+```
+```{r}
+#Observamos que la variable que mas se correlaciona con las demas es TiempoEdu
+sort(Datafinalsf$communalities)
+```
+
+```{r}
+#La variable con la varianza mas unica es Asignacion 
+sort(Datafinalsf$uniquenesses)
+```
+
+```{r}
+#La variable con mayor cercanía de factores es Ingreso
+sort(Datafinalsf$complexity)
+```
+
+```{r}
+scores=as.data.frame(Datafinalsf$scores)
+names(scores)=c("IDH","CapEs") #le ponemos nombre a nuestros indices
+```
+```{r}
+Datafinals=merge(Datafinals,scores,by=0)
+head(Datafinals)#resultado
+```
+
+```{r}
+#Volvemos a colocar los row names
+row.names(Datafinals)=Datafinals$Row.names
+Datafinals$Row.names=NULL
+
+head(Datafinals)#resultado
+```
+```{r}
+Dataclus2= Dataclus[-c(1:5)]
+```
+```{r}
+
+Datafinal2=Datafinal
+Datafinal2 = merge(Datafinal2, Dataclus2, by=0)
+```
+```{r}
+#Creamos los dos cuadros con las medias y divididos, el primero por los distritos en los que ganó Ollanta Humala y el segundo con los cluster
+aggregate(cbind(Esperanza,Educa,TiempoEdu,Ingreso,
+                Asignacion) ~ VotoH, data=Datafinal2,FUN=mean)
+```
+```{r}
+aggregate(cbind(Esperanza,Educa,TiempoEdu,Ingreso,
+                Asignacion) ~ jerarquica, data=Datafinal2,FUN=mean)
+```
+
+
+```{r}
+Datafinals2=Datafinals
+Datafinals2=merge(Datafinals2,Dataclus2,by=0)
+head(Datafinals2)#resultado
+```
+
+```{r}
+#Data estandarizada con las variables del analisis factorial y el analisis de conglomerados
+row.names(Datafinals2)=Datafinals2$Row.names
+Datafinals2$Row.names=NULL
+
+head(Datafinals2)#resultado
+```
+```{r}
+#Base de datos exportada de r a excel:
+library(XLConnect)
+
+```
+
+```{r}
+#Nos aseguramos de que la base de datos a exportar sea un data frame
+row.names(Datafinal2)=Datafinal2$Row.names
+Datafinal2 = Datafinal2[-c(1,2)]
+
+
+```
+
+```{r}
+#Creamos una base de datos de seguridad
+str(Datafinal2)
+Datafinals4=Datafinals2
+
+```
+```{r}
+
+Datafinals4 = Datafinals4[-c(1:5,8)]
+```
+```{r}
+#Creamos una base de datos, eliminamos todo menos el ubigeo y el nombre de los distritos, para luego añadirlo al data frame a exportar
+Datafinal3=Datafinal2
+JYP= Datafinal
+JYP=JYP[-c(2:7)]
+```
+```{r}
+#Juntamos la base datos mas los cluster, mas los resultados del analisis factorial, esto mueve los row names
+Datafinal3=merge(Datafinal3,Datafinals4,by=0)
+
+```
+```{r}
+#Colocamos de nuevo lso row names
+row.names(Datafinal3)=Datafinal3$Row.names
+
+
+```
+```{r}
+#Eliminamos los row names
+Datafinal3 = Datafinal3[-c(1)]
+```
+```{r}
+#Juntamos el nombre de los distritos a la base a exportar
+Datafinal3=merge(Datafinal3,JYP,by=0)
+```
+```{r}
+#Volvemos a colocar y eliminar lso row names
+row.names(Datafinal3)=Datafinal3$Row.names
+```
+```{r}
+Datafinal3 = Datafinal3[-c(1)]
+```
+
+```{r}
+
+#Seguimos con la creación de la base para exportar:
+wb=loadWorkbook("Basededatosfinal4.xlsx", create = TRUE)
+createSheet(wb, name = "lista2")
+createName(wb, name = "lista2", formula = "lista2!$A$1")
+writeNamedRegion(wb,Datafinal3,name = "lista2")
+saveWorkbook(wb)
+
+```
